@@ -1,0 +1,50 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          brew install ldid dpkg make
+          echo "MAKE=$(brew --prefix make)/bin/gmake" >> "$GITHUB_ENV"
+          ldid -v | head -1
+          dpkg-deb --version | head -1
+
+      - name: Install Theos
+        run: |
+          git clone --recursive --depth 1 https://github.com/theos/theos.git "$HOME/theos"
+          echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
+          echo "$HOME/theos/bin" >> "$GITHUB_PATH"
+
+      - name: Link iOS SDK
+        run: |
+          mkdir -p "$THEOS/sdks"
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          VER="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "SDK=$SDK  VER=$VER"
+          ln -sfn "$SDK" "$THEOS/sdks/iPhoneOS${VER}.sdk"
+          ln -sfn "$SDK" "$THEOS/sdks/iPhoneOS.sdk"
+          ls -l "$THEOS/sdks"
+
+      - name: Build
+        run: "$MAKE" package FINALPACKAGE=1
+
+      - name: List artifacts
+        if: always()
+        run: ls -lhR packages/ 2>/dev/null || echo "no packages dir"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vcam-deb
+          path: packages/*.deb
+          if-no-files-found: error
+          retention-days: 14
