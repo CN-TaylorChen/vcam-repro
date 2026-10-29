@@ -2,6 +2,12 @@
 
 复现 `VCAM 3.0.0` 的核心能力：**把任意 App 的摄像头画面/麦克风声音换成你自己的素材**。
 
+[![build](https://github.com/CN-TaylorChen/vcam-repro/actions/workflows/build.yml/badge.svg)](https://github.com/CN-TaylorChen/vcam-repro/actions/workflows/build.yml)
+
+> **成品已构建**：GitHub Actions 上编译通过（arm64 + arm64e 通用），
+> 直接下载 → [com.vcam.repro_0.1.0_iphoneos-arm64.deb](https://github.com/CN-TaylorChen/vcam-repro/releases/download/v0.1.0/com.vcam.repro_0.1.0_iphoneos-arm64.deb)
+> （也可以从 [Releases](https://github.com/CN-TaylorChen/vcam-repro/releases) 页面或 Actions 的 Artifacts 取）
+
 ---
 
 ## 一、先说结论：能做到，但有三个前提
@@ -37,6 +43,7 @@ vcam_repro/
 ├── Makefile                 # theos 编译
 ├── control                  # deb 元信息
 ├── VCamRepro.plist          # 注入范围（默认 com.apple.UIKit = 所有 App）
+├── .github/workflows/build.yml  # push 即自动构建 deb 并上传 Artifacts
 └── tools/
     ├── frida_probe.js       # 不用编译，先确认 Hook 点存在（第 0 步）
     └── dump_methods.m       # 私有方法探测器（换 iOS 版本先跑它）
@@ -61,6 +68,16 @@ fake = [[VCamSource shared] copyVideoSampleBufferForFormat:fmt timing:timing pix
 
 ## 五、编译
 
+### 方式一：GitHub Actions（什么都不用装）
+
+仓库已配好 `.github/workflows/build.yml`，push 到 `main` 或在 Actions 页面点 **Run workflow** 即可。
+CI 会：clone Theos → 把 Xcode 自带 iPhoneOS SDK 软链进 `$THEOS/sdks` → `make package FINALPACKAGE=1`
+→ 校验 deb 里 dylib 和 filter plist 都在 → 上传 `vcam-repro-deb` 产物。
+
+最近一次构建：`✓ build in 30s`，产物 14.7 KB（deb）。
+
+### 方式二：本地 theos
+
 ```bash
 # 1. 装 theos（macOS / Linux / WSL 都行）
 export THEOS=~/theos
@@ -72,7 +89,9 @@ make package FINALPACKAGE=1
 # 产物：packages/com.vcam.repro_0.1.0_iphoneos-arm64.deb
 ```
 
-> 说明：本仓库代码是**经过仔细设计但未在真机编译验证**的骨架。CoreMedia/AVFoundation 的 API 签名都是公开且稳定的，理论可直接编过；若报错请按注释调整（常见是 `kCVPixelBufferWidthKey` 在 `AVAssetReaderTrackOutput` 上的支持差异）。
+> 本仓库代码已在 CI 上真实编译通过（macos-14 + Xcode 16 SDK，arm64 与 arm64e 双切片，ldid 签名）。
+> 运行时行为（Hook 是否命中、假帧是否被接受）仍需真机验证 —— 见第七节。
+
 
 ---
 
@@ -81,8 +100,12 @@ make package FINALPACKAGE=1
 ### 路线 A：越狱设备（推荐，最省事）
 
 ```bash
+# 直接把 Release 里的 deb 传上去装
+scp com.vcam.repro_0.1.0_iphoneos-arm64.deb root@<设备IP>:/var/root/
+ssh root@<设备IP> 'dpkg -i /var/root/com.vcam.repro_0.1.0_iphoneos-arm64.deb && killall -9 SpringBoard'
+
+# 或者源码目录下：
 make package install          # 需要 ssh 到设备，或 USB 转发
-# 或手动：scp deb 到设备 → dpkg -i
 ```
 
 装完注入 `/Library/MobileSubstrate/DynamicLibraries/VCamRepro.dylib`，
@@ -97,6 +120,18 @@ TrollStore **没有 MobileSubstrate**，装 deb 不会自动加载。必须：
 3. 目标 App 需要重新安装
 
 这条路每个 App 都要单独注入一次，但不需要越狱。
+
+### 关于 rootful / rootless
+
+当前 deb 是 **rootful（arm64）**：装到 `/Library/MobileSubstrate/DynamicLibraries/`，适用于
+palera1n rootful、checkra1n、unc0ver 这类"根文件系统可写"的越狱。
+
+无根越狱（Dopamine / palera1n rootless）需要 `/var/jb` 前缀的包，自己编一个即可：
+
+```bash
+make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+# 产物装到 /var/jb/Library/MobileSubstrate/DynamicLibraries/
+```
 
 ---
 
