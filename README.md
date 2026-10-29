@@ -5,8 +5,10 @@
 [![build](https://github.com/CN-TaylorChen/vcam-repro/actions/workflows/build.yml/badge.svg)](https://github.com/CN-TaylorChen/vcam-repro/actions/workflows/build.yml)
 
 > **成品已构建**：GitHub Actions 上编译通过（arm64 + arm64e 通用），
-> 直接下载 → [com.vcam.repro_0.1.0_iphoneos-arm64.deb](https://github.com/CN-TaylorChen/vcam-repro/releases/download/v0.1.0/com.vcam.repro_0.1.0_iphoneos-arm64.deb)
-> （也可以从 [Releases](https://github.com/CN-TaylorChen/vcam-repro/releases) 页面或 Actions 的 Artifacts 取）
+> 越狱装包 → [com.vcam.repro_0.2.0_iphoneos-arm64.deb](https://github.com/CN-TaylorChen/vcam-repro/releases/download/v0.2.0/com.vcam.repro_0.2.0_iphoneos-arm64.deb)
+> 自签注入 → [VCamRepro.dylib](https://github.com/CN-TaylorChen/vcam-repro/releases/download/v0.2.0/VCamRepro.dylib)（arm64+arm64e）
+> 或 [VCamRepro-arm64.dylib](https://github.com/CN-TaylorChen/vcam-repro/releases/download/v0.2.0/VCamRepro-arm64.dylib)（老工具兼容）
+> 也可以从 [Releases](https://github.com/CN-TaylorChen/vcam-repro/releases) 页面或 Actions 的 Artifacts 取
 
 ---
 
@@ -86,7 +88,7 @@ git clone --recursive https://github.com/theos/theos.git $THEOS
 # 2. 编译
 cd vcam_repro
 make package FINALPACKAGE=1
-# 产物：packages/com.vcam.repro_0.1.0_iphoneos-arm64.deb
+# 产物：packages/com.vcam.repro_0.2.0_iphoneos-arm64.deb
 ```
 
 > 本仓库代码已在 CI 上真实编译通过（macos-14 + Xcode 16 SDK，arm64 与 arm64e 双切片，ldid 签名）。
@@ -101,8 +103,8 @@ make package FINALPACKAGE=1
 
 ```bash
 # 直接把 Release 里的 deb 传上去装
-scp com.vcam.repro_0.1.0_iphoneos-arm64.deb root@<设备IP>:/var/root/
-ssh root@<设备IP> 'dpkg -i /var/root/com.vcam.repro_0.1.0_iphoneos-arm64.deb && killall -9 SpringBoard'
+scp com.vcam.repro_0.2.0_iphoneos-arm64.deb root@<设备IP>:/var/root/
+ssh root@<设备IP> 'dpkg -i /var/root/com.vcam.repro_0.2.0_iphoneos-arm64.deb && killall -9 SpringBoard'
 
 # 或者源码目录下：
 make package install          # 需要 ssh 到设备，或 USB 转发

@@ -1,6 +1,6 @@
 Package: com.vcam.repro
 Name: VCamRepro
-Version: 0.1.0
+Version: 0.2.0
 Architecture: iphoneos-arm64
 Description: 虚拟摄像头最小复现（学习 / 自测用）
 Maintainer: local
