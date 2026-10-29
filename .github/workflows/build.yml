@@ -34,6 +34,22 @@ jobs:
           make package FINALPACKAGE=1 -j"$(sysctl -n hw.ncpu)"
           ls -l packages/
 
+      - name: Inspect package
+        run: |
+          set -e
+          DEB="$(ls "$GITHUB_WORKSPACE"/packages/*.deb | head -1)"
+          echo "deb: $DEB"
+          cd "$RUNNER_TEMP"
+          ar x "$DEB"
+          echo "===== control ====="
+          tar xzOf control.tar.gz ./control
+          echo "===== files ====="
+          tar tvf data.tar.*
+          # 关键校验：过滤 plist 必须在包里，否则 MobileSubstrate 不会加载
+          tar tf data.tar.* | grep -q "DynamicLibraries/VCamRepro.plist"
+          tar tf data.tar.* | grep -q "DynamicLibraries/VCamRepro.dylib"
+          echo "OK: dylib + filter plist 都在"
+
       - name: Upload deb
         uses: actions/upload-artifact@v4
         with:
