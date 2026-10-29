@@ -4,4 +4,38 @@ jobs:
   build:
     runs-on: macos-14
     steps:
-      - run: echo hello-from-runner && uname -a
+      - uses: actions/checkout@v4
+
+      - name: Setup Theos
+        run: |
+          set -e
+          export THEOS="$HOME/theos"
+          git clone --recursive --depth 1 https://github.com/theos/theos.git "$THEOS"
+          SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
+          SDK_VER="$(xcrun --sdk iphoneos --show-sdk-version)"
+          mkdir -p "$THEOS/sdks"
+          ln -sfn "$SDK_PATH" "$THEOS/sdks/iPhoneOS${SDK_VER}.sdk"
+          echo "THEOS=$THEOS" >> "$GITHUB_ENV"
+          echo "$THEOS/bin" >> "$GITHUB_PATH"
+          echo "SDK: $SDK_PATH ($SDK_VER)"
+          ls -l "$THEOS/sdks"
+
+      - name: Ensure ldid
+        run: |
+          if [ ! -x "$THEOS/bin/ldid" ]; then
+            brew install ldid || true
+            L="$(command -v ldid || true)"
+            if [ -n "$L" ]; then ln -sfn "$L" "$THEOS/bin/ldid"; fi
+          fi
+          "$THEOS/bin/ldid" -v || true
+
+      - name: Build package
+        run: |
+          make package FINALPACKAGE=1 -j"$(sysctl -n hw.ncpu)"
+          ls -l packages/
+
+      - name: Upload deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcam-repro-deb
+          path: packages/*.deb
