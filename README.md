@@ -121,6 +121,46 @@ TrollStore **没有 MobileSubstrate**，装 deb 不会自动加载。必须：
 
 这条路每个 App 都要单独注入一次，但不需要越狱。
 
+### 路线 C：自签 IPA（ESign / Sideloadly / AltStore / 轻松签）
+
+只拿 `VCamRepro.dylib` 就够了，**不需要 deb、不需要 plist**。
+
+```bash
+# 1. 解压目标 App 的 IPA
+unzip -q Target.ipa -d work/
+
+# 2. 把 dylib 和素材一起放进 .app
+cp VCamRepro.dylib            work/Payload/Target.app/
+cp your-video.mp4             work/Payload/Target.app/source.mp4   # ← 关键，见下
+
+# 3. 注入 Load Command（二选一）
+#    a) insert_dylib
+insert_dylib --inplace --strip-codesig \
+    --add-load-cmd @executable_path/VCamRepro.dylib \
+    work/Payload/Target.app/Target
+#    b) 或 optool / Azule，效果相同
+
+# 4. 重新打包
+cd work && zip -qry ../Target-injected.ipa Payload && cd ..
+```
+
+然后把这个 ipa 丢给 ESign / Sideloadly 用你自己的证书重签安装即可
+（重签工具会把 dylib 一起签，不用手动 `ldid`）。
+
+**素材必须放在 App 能读到的地方。** 自签的 App 依然在沙箱里，读不到
+`/var/mobile/Media`。本版本按以下顺序查找，第一个命中即用：
+
+| 顺序 | 路径 | 适用 |
+|---|---|---|
+| 0 | `/var/mobile/Library/Preferences/com.vcam.repro.plist` 的 `MediaPath` | 越狱机手动指定 |
+| 1 | `<.app>/source.mp4`、`<.app>/VCam/source.mp4` | **自签首选**，打进 IPA 最稳 |
+| 2 | `Documents/source.mp4`、`Documents/VCam/source.mp4`、`Library/VCam/source.mp4`、`tmp/source.mp4` | App 开了文件共享时可直接拷 |
+| 3 | `/var/mobile/Media/VCam/source.mp4`、`/var/mobile/Documents/VCam/source.mp4` | 越狱 |
+
+> 如果 dylib 放进 `.app/Frameworks/`，Load Command 要写
+> `@rpath/VCamRepro.dylib` 并确保有 `LC_RPATH = @executable_path/Frameworks`；
+> 图省事就直接放 `.app/` 根目录 + `@executable_path/`。
+
 ### 关于 rootful / rootless
 
 当前 deb 是 **rootful（arm64）**：装到 `/Library/MobileSubstrate/DynamicLibraries/`，适用于
@@ -203,6 +243,8 @@ killall -HUP Camera    # 或发 Darwin 通知 com.vcam.repro.reload
 | 8 | 注入 UIKit 拖慢启动 | 所有 App 冷启动变慢 | 真产品应该收窄 filter，或延迟到首次用到再初始化 |
 | 9 | 内存泄漏 | 用一会儿 App 被杀 | `CVPixelBufferRetain/Release` 配对；本仓库每帧都 release |
 | 10 | TrollStore 装 deb 没反应 | 什么都不发生 | 见路线 B，必须注入 app bundle |
+| 11 | 自签后日志只有"没找到素材" | 画面没变，其他一切正常 | 沙箱读不到 `/var/mobile/Media`，把 `source.mp4` 打进 `.app` 里（见路线 C 路径表） |
+| 12 | 自签工具重签失败 / 崩溃 | 装不上或闪退 | 试 `VCamRepro-arm64.dylib`（arm64 单切片），部分老工具处理 arm64e 切片有问题 |
 
 ---
 

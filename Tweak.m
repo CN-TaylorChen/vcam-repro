@@ -22,22 +22,60 @@ typedef void (*ProcessSampleBufferFn)(id, SEL, CMSampleBufferRef);
 static BOOL gVerbose = YES;
 
 // ---------------- 素材路径 ----------------
-// 简化版：固定读这个文件；真要做成产品，换成你自己的设置界面 / 文件选择器
-static NSString *VCamMediaPath(void) {
+// 按「自签沙箱内 → 越狱共享目录」的顺序找素材，返回第一个真实存在的文件。
+//
+// 为什么要这么多候选：自签（TrollStore / ESign / Sideloadly 注入后重签）的 App
+// 仍然跑在沙箱里，读不到 /var/mobile/Media 这种越狱共享目录，所以必须优先在
+// App 自己的容器里找。把 source.mp4 直接打进 IPA 的 .app 里是最稳的做法。
+static NSString *VCamPrefsMediaPath(void) {
     NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:
                            @"/var/mobile/Library/Preferences/com.vcam.repro.plist"];
     NSString *p = prefs[@"MediaPath"];
-    return p.length ? p : @"/var/mobile/Media/VCam/source.mp4";
+    return p.length ? p : nil;
+}
+
+static NSString *VCamResolveMediaPath(void) {
+    NSMutableArray<NSString *> *candidates = [NSMutableArray array];
+
+    // 0) 手动指定优先（越狱机改 plist 即可覆盖）
+    NSString *prefs = VCamPrefsMediaPath();
+    if (prefs) [candidates addObject:prefs];
+
+    // 1) App bundle 内 —— 自签最稳：把 source.mp4 塞进 IPA 的 Payload/xxx.app/
+    NSString *bundle = [NSBundle mainBundle].bundlePath;
+    [candidates addObject:[bundle stringByAppendingPathComponent:@"source.mp4"]];
+    [candidates addObject:[bundle stringByAppendingPathComponent:@"VCam/source.mp4"]];
+
+    // 2) App 沙箱内 —— 用「文件」App / Filza 拷进 Documents
+    NSString *home = NSHomeDirectory();
+    [candidates addObject:[home stringByAppendingPathComponent:@"Documents/source.mp4"]];
+    [candidates addObject:[home stringByAppendingPathComponent:@"Documents/VCam/source.mp4"]];
+    [candidates addObject:[home stringByAppendingPathComponent:@"Library/VCam/source.mp4"]];
+    [candidates addObject:[NSTemporaryDirectory() stringByAppendingPathComponent:@"source.mp4"]];
+
+    // 3) 越狱共享目录
+    [candidates addObject:@"/var/mobile/Media/VCam/source.mp4"];
+    [candidates addObject:@"/var/mobile/Documents/VCam/source.mp4"];
+
+    NSFileManager *fm = [NSFileManager defaultManager];
+    for (NSString *p in candidates) {
+        if (p.length && [fm fileExistsAtPath:p]) return p;
+    }
+    return nil;
 }
 
 static void VCamReload(void) {
-    NSString *path = VCamMediaPath();
-    BOOL exists = [[NSFileManager defaultManager] fileExistsAtPath:path];
+    NSString *path = VCamResolveMediaPath();
     VCamSource *src = [VCamSource shared];
     // 顺序不能反：先给素材再开门，避免启动一个没有素材的解码线程
-    src.videoURL = exists ? [NSURL fileURLWithPath:path] : nil;
-    src.enabled = exists;
-    NSLog(@"[VCam] 素材 %@ -> %@", exists ? @"已加载" : @"缺失", path);
+    src.videoURL = path ? [NSURL fileURLWithPath:path] : nil;
+    src.enabled = (path != nil);
+    if (path) {
+        NSLog(@"[VCam] 素材 已加载 -> %@", path);
+    } else {
+        NSLog(@"[VCam] 没找到素材。自签：把 source.mp4 放进 .app 内或 Documents/；"
+              @"越狱：/var/mobile/Media/VCam/source.mp4");
+    }
 }
 
 // ---------------- Hook 本体 ----------------
