@@ -223,7 +223,7 @@
         }];
     if (st == AVAudioConverterOutputStatus_Error || outBuf.frameLength == 0) return nil;
 
-    AudioBufferList *abl = outBuf.audioBufferList;
+    const AudioBufferList *abl = outBuf.audioBufferList;
     if (abl->mNumberBuffers == 1) {
         return [NSData dataWithBytes:abl->mBuffers[0].mData length:abl->mBuffers[0].mDataByteSize];
     }
